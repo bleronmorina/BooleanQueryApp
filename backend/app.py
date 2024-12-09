@@ -5,33 +5,21 @@ from dotenv import load_dotenv
 import os
 from pymongo import MongoClient
 from bson.objectid import ObjectId
+from datetime import datetime
 
 load_dotenv()
 
 client = OpenAI()
 
-mongo_uri = os.getenv("MONGO_URI") 
+mongo_uri = os.getenv("MONGO_URI")
 client_db = MongoClient(mongo_uri)
 db = client_db["boolean_query_db"]
 sessions_collection = db["sessions"]
 
 app = Flask(__name__)
-CORS(app, supports_credentials=True) 
+CORS(app, supports_credentials=True)
 
-app.secret_key = os.getenv("FLASK_SECRET_KEY", os.urandom(24).hex())  
-
-@app.route('/start-session', methods=['POST'])
-def start_session():
-    try:
-        session_data = {
-            "messages": [
-                {"role": "system", "content": "You are an expert in crafting Boolean queries for tenders, you respond only with the result Query."}
-            ]
-        }
-        session = sessions_collection.insert_one(session_data)
-        return jsonify({"message": "New session started.", "sessionId": str(session.inserted_id)}), 201
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+app.secret_key = os.getenv("FLASK_SECRET_KEY", os.urandom(24).hex())
 
 @app.route('/update-query', methods=['POST'])
 def update_query():
@@ -39,23 +27,30 @@ def update_query():
         data = request.json
         query = data.get("query", "")
         instructions = data.get("instructions", "")
-        template = data.get("template", "")
-        industry_info = data.get("industryInfo", "")
         previous_conversation = data.get("previousConversation", "")
-        tender_type = data.get("tenderType", "")
         translation = data.get("translation", "")
         tone = data.get("tone", "")
         session_id = data.get("sessionId", "")
 
-        if not query or not instructions or not session_id:
-            return jsonify({"error": "Query, instructions, and sessionId are required"}), 400
+        if not query or not instructions:
+            return jsonify({"error": "Query and instructions are required"}), 400
+
+        # Create a new session if no session ID provided
+        if not session_id:
+            session_data = {
+                "messages": [
+                    {"role": "system", "content": "You are an expert in crafting Boolean queries for tenders. Respond only with the result query."}
+                ],
+                "created_at": datetime.utcnow()
+            }
+            session = sessions_collection.insert_one(session_data)
+            session_id = str(session.inserted_id)
 
         session = sessions_collection.find_one({"_id": ObjectId(session_id)})
         if not session:
-            return jsonify({"error": "Session not found. Please start a session first."}), 400
+            return jsonify({"error": "Session not found."}), 400
 
         prompt = "Update the Boolean query based on the following inputs:\n"
-
         if query:
             prompt += f"Current Boolean query: {query}\n"
         if instructions:
@@ -83,24 +78,28 @@ def update_query():
 
         session['messages'].append({"role": "assistant", "content": assistant_response})
 
-        sessions_collection.update_one({"_id": ObjectId(session_id)}, {"$set": {"messages": session['messages']}})
+        sessions_collection.update_one(
+            {"_id": ObjectId(session_id)},
+            {"$set": {"messages": session['messages']}}
+        )
 
-        return jsonify({"updatedQuery": assistant_response})
+        return jsonify({"updatedQuery": assistant_response, "sessionId": session_id})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/get-history', methods=['GET'])
-def get_history():
-    session_id = request.args.get('sessionId')
-    if not session_id:
-        return jsonify({"error": "sessionId is required"}), 400
 
-    session = sessions_collection.find_one({"_id": ObjectId(session_id)})
-    if not session:
-        return jsonify({"error": "Session not found. Please start a session first."}), 400
-
-    return jsonify({"history": session['messages']})
+@app.route('/get-all-sessions', methods=['GET'])
+def get_all_sessions():
+    try:
+        sessions = sessions_collection.find({}, {"created_at": 1})
+        session_list = [
+            {"id": str(session["_id"]), "created_at": session["created_at"].strftime("%Y-%m-%d %H:%M:%S")}
+            for session in sessions
+        ]
+        return jsonify({"sessions": session_list})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":

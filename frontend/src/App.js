@@ -14,67 +14,68 @@ import {
 } from "@mui/material";
 
 const App = () => {
-  const [query, setQuery] = useState("(example AND query)");
+  const [query, setQuery] = useState(
+    '("window cleaning" OR "window cleaner") AND (building OR skyscraper OR office) AND clean* AND ("safety harness" OR "high-rise")'
+  );
   const [instructions, setInstructions] = useState("");
   const [updatedQuery, setUpdatedQuery] = useState("");
-  const [sessionId, setSessionId] = useState(null);
-  const [sessionStatus, setSessionStatus] = useState("idle");
+  const [sessionId, setSessionId] = useState("");
+  const [sessions, setSessions] = useState([]);
+  const [industryInfo, setIndustryInfo] = useState("");
+  const [selectedSession, setSelectedSession] = useState("");
+  const [tone, setTone] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    if (sessionStatus === "idle") {
-      const startSession = async () => {
-        setSessionStatus("loading");
-        try {
-          const response = await fetch("http://127.0.0.1:5000/start-session", {
-            method: "POST",
-            credentials: "include",
-          });
+    fetchSessions();
+  }, []);
 
-          const data = await response.json();
-
-          if (!response.ok) {
-            throw new Error(`HTTP error! Status: ${response.status}`);
-          }
-
-          console.log("Session started:", data);
-          setSessionId(data.sessionId);
-          setSessionStatus("success");
-        } catch (error) {
-          console.error("Error starting session:", error);
-          setSessionStatus("error");
-        }
-      };
-      startSession();
+  const fetchSessions = async () => {
+    try {
+      const response = await fetch("http://127.0.0.1:5000/get-all-sessions");
+      const data = await response.json();
+      if (data.sessions) {
+        setSessions(data.sessions);
+      }
+    } catch (err) {
+      console.error("Error fetching sessions:", err);
     }
-  }, [sessionStatus]);
+  };
 
   const handleSend = async () => {
-    if (!query || !instructions || !sessionId) {
-      alert("Query, instructions, and session ID are required!");
-      return;
-    }
-
+    setLoading(true);
+    setError("");
     try {
       const response = await fetch("http://127.0.0.1:5000/update-query", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ query, instructions, sessionId }),
+        body: JSON.stringify({
+          query,
+          instructions,
+          industryInfo,
+          tone,
+          sessionId: selectedSession || sessionId,
+        }),
       });
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
+
       const data = await response.json();
+
       if (data.updatedQuery) {
         setUpdatedQuery(data.updatedQuery);
-      } else {
-        console.error("Error:", data.error);
       }
-    } catch (error) {
-      console.error("Error updating query:", error);
-      alert(
-        "Failed to update the query. Please check the console for details."
-      );
+
+      if (data.sessionId) {
+        setSessionId(data.sessionId);
+      }
+
+      if (data.error) {
+        setError(data.error);
+      }
+    } catch (err) {
+      setError("Failed to update query. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -84,65 +85,42 @@ const App = () => {
         Boolean Query Builder
       </Typography>
 
-      {/* Session Status */}
-      {sessionStatus === "loading" && (
-        <Box sx={{ textAlign: "center", marginBottom: 2 }}>
-          <CircularProgress />
-          <Typography>Starting session...</Typography>
-        </Box>
-      )}
-      {sessionStatus === "error" && (
-        <Alert severity="error" sx={{ marginBottom: 2 }}>
-          Failed to start the session. Please check the server connection.
-        </Alert>
-      )}
+      {error && <Alert severity="error">{error}</Alert>}
 
       {/* Top Controls */}
       <Box
         sx={{
           display: "grid",
-          gridTemplateColumns: "repeat(6, 1fr)",
+          gridTemplateColumns: "repeat(3, 1fr)",
           gap: 2,
           marginBottom: 4,
         }}
       >
-        {/* Dropdowns and Text Fields */}
-        <FormControl fullWidth>
-          <InputLabel>Select a Template</InputLabel>
-          <Select>
-            <MenuItem value="template1">Template 1</MenuItem>
-            <MenuItem value="template2">Template 2</MenuItem>
-          </Select>
-        </FormControl>
         <TextField
           fullWidth
           label="Enter Industry Info"
           placeholder="Write some context..."
+          value={industryInfo}
+          onChange={(e) => setIndustryInfo(e.target.value)}
         />
         <FormControl fullWidth>
           <InputLabel>Select a Previous Conversation</InputLabel>
-          <Select>
-            <MenuItem value="conversation1">Conversation 1</MenuItem>
-            <MenuItem value="conversation2">Conversation 2</MenuItem>
+          <Select
+            value={selectedSession}
+            onChange={(e) => setSelectedSession(e.target.value)}
+          >
+            <MenuItem>New Conversation</MenuItem>
+            {sessions.map((session) => (
+              <MenuItem key={session.id} value={session.id}>
+                {session.created_at}
+              </MenuItem>
+            ))}
           </Select>
         </FormControl>
-        <FormControl fullWidth>
-          <InputLabel>Select Tender Type</InputLabel>
-          <Select>
-            <MenuItem value="tender1">Tender Type 1</MenuItem>
-            <MenuItem value="tender2">Tender Type 2</MenuItem>
-          </Select>
-        </FormControl>
-        <FormControl fullWidth>
-          <InputLabel>Translate to:</InputLabel>
-          <Select>
-            <MenuItem value="english">English</MenuItem>
-            <MenuItem value="spanish">Spanish</MenuItem>
-          </Select>
-        </FormControl>
+
         <FormControl fullWidth>
           <InputLabel>Tone of Conversation</InputLabel>
-          <Select>
+          <Select value={tone} onChange={(e) => setTone(e.target.value)}>
             <MenuItem value="formal">Formal</MenuItem>
             <MenuItem value="technical">Technical</MenuItem>
           </Select>
@@ -201,9 +179,10 @@ const App = () => {
           variant="contained"
           color="primary"
           onClick={handleSend}
+          disabled={loading}
           sx={{ marginTop: 2 }}
         >
-          Send to Chatbot
+          {loading ? <CircularProgress size={24} /> : "Send to Chatbot"}
         </Button>
       </Paper>
     </Box>
