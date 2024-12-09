@@ -101,6 +101,34 @@ def get_all_sessions():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/get-session-details/<session_id>', methods=['GET'])
+def get_session_details(session_id):
+    try:
+        session = sessions_collection.find_one({"_id": ObjectId(session_id)})
+        if not session:
+            return jsonify({"error": "Session not found."}), 404
+
+        messages = session.get("messages", [])
+        if len(messages) < 2:
+            return jsonify({"error": "Not enough messages in the session."}), 400
+
+        # Extract the first user message and the last assistant response
+        initial_query = next(
+            (msg["content"] for msg in messages if msg["role"] == "user"), None
+        )
+        last_response = next(
+            (msg["content"] for msg in reversed(messages) if msg["role"] == "assistant"), None
+        )
+
+        return jsonify({
+            "initialQuery": initial_query,
+            "lastResponse": last_response,
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 
 if __name__ == "__main__":
     app.run(debug=True)

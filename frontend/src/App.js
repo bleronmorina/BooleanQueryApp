@@ -2,16 +2,14 @@ import React, { useState, useEffect } from "react";
 import {
   Box,
   Typography,
-  TextField,
   Button,
-  Select,
-  MenuItem,
-  InputLabel,
-  FormControl,
   Paper,
   CircularProgress,
   Alert,
 } from "@mui/material";
+import { fetchSessions, updateQuery } from "./services/api";
+import InputField from "./components/InputField";
+import DropdownSelect from "./components/DropdownSelect.js";
 
 const App = () => {
   const [query, setQuery] = useState(
@@ -28,51 +26,34 @@ const App = () => {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetchSessions();
-  }, []);
-
-  const fetchSessions = async () => {
-    try {
-      const response = await fetch("http://127.0.0.1:5000/get-all-sessions");
-      const data = await response.json();
-      if (data.sessions) {
-        setSessions(data.sessions);
+    (async () => {
+      try {
+        const sessionData = await fetchSessions();
+        setSessions(sessionData);
+      } catch (err) {
+        console.error("Error fetching sessions:", err);
+        setError("Unable to fetch sessions. Please try again later.");
       }
-    } catch (err) {
-      console.error("Error fetching sessions:", err);
-    }
-  };
+    })();
+  }, []);
 
   const handleSend = async () => {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("http://127.0.0.1:5000/update-query", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query,
-          instructions,
-          industryInfo,
-          tone,
-          sessionId: selectedSession || sessionId,
-        }),
+      const data = await updateQuery({
+        query,
+        instructions,
+        industryInfo,
+        tone,
+        sessionId: selectedSession || sessionId,
       });
 
-      const data = await response.json();
+      setUpdatedQuery(data.updatedQuery || "");
+      setSessionId(data.sessionId || "");
 
-      if (data.updatedQuery) {
-        setUpdatedQuery(data.updatedQuery);
-      }
-
-      if (data.sessionId) {
-        setSessionId(data.sessionId);
-      }
-
-      if (data.error) {
-        setError(data.error);
-      }
-    } catch (err) {
+      if (data.error) setError(data.error);
+    } catch {
       setError("Failed to update query. Please try again.");
     } finally {
       setLoading(false);
@@ -87,100 +68,77 @@ const App = () => {
 
       {error && <Alert severity="error">{error}</Alert>}
 
-      {/* Top Controls */}
+      {/* Input Controls */}
       <Box
         sx={{
           display: "grid",
           gridTemplateColumns: "repeat(3, 1fr)",
           gap: 2,
-          marginBottom: 4,
+          mb: 4,
         }}
       >
-        <TextField
-          fullWidth
+        <InputField
           label="Enter Industry Info"
-          placeholder="Write some context..."
           value={industryInfo}
+          placeholder="Write some context..."
           onChange={(e) => setIndustryInfo(e.target.value)}
         />
-        <FormControl fullWidth>
-          <InputLabel>Select a Previous Conversation</InputLabel>
-          <Select
-            value={selectedSession}
-            onChange={(e) => setSelectedSession(e.target.value)}
-          >
-            <MenuItem>New Conversation</MenuItem>
-            {sessions.map((session) => (
-              <MenuItem key={session.id} value={session.id}>
-                {session.created_at}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        <FormControl fullWidth>
-          <InputLabel>Tone of Conversation</InputLabel>
-          <Select value={tone} onChange={(e) => setTone(e.target.value)}>
-            <MenuItem value="formal">Formal</MenuItem>
-            <MenuItem value="technical">Technical</MenuItem>
-          </Select>
-        </FormControl>
+        <DropdownSelect
+          label="Select a Previous Conversation"
+          value={selectedSession}
+          options={sessions.map((session) => ({
+            value: session.id,
+            label: session.created_at,
+          }))}
+          onChange={(e) => setSelectedSession(e.target.value)}
+        />
+        <DropdownSelect
+          label="Tone of Conversation"
+          value={tone}
+          options={[
+            { value: "formal", label: "Formal" },
+            { value: "technical", label: "Technical" },
+          ]}
+          onChange={(e) => setTone(e.target.value)}
+        />
       </Box>
 
-      {/* Main Content Section */}
+      {/* Query Section */}
       <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 4,
-          marginBottom: 4,
-        }}
+        sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, mb: 4 }}
       >
-        {/* Current Query */}
-        <Paper elevation={2} sx={{ padding: 2 }}>
+        <Paper elevation={2} sx={{ p: 2 }}>
           <Typography variant="h6">Current Query</Typography>
-          <TextField
+          <InputField
             multiline
             rows={8}
-            fullWidth
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            sx={{ marginTop: 2 }}
           />
         </Paper>
 
-        {/* Generated Query */}
-        <Paper elevation={2} sx={{ padding: 2 }}>
+        <Paper elevation={2} sx={{ p: 2 }}>
           <Typography variant="h6">Generated Query</Typography>
-          <TextField
-            multiline
-            rows={8}
-            fullWidth
-            value={updatedQuery}
-            disabled
-            sx={{ marginTop: 2 }}
-          />
+          <InputField multiline rows={8} value={updatedQuery} disabled />
         </Paper>
       </Box>
 
       {/* Guidelines Section */}
-      <Paper elevation={2} sx={{ padding: 2 }}>
+      <Paper elevation={2} sx={{ p: 2 }}>
         <Typography variant="h6">Enter Your Guidelines</Typography>
-        <TextField
+        <InputField
           multiline
           rows={4}
-          fullWidth
+          placeholder="Add guidelines such as 'include safety measures, certifications, etc.'"
           value={instructions}
           onChange={(e) => setInstructions(e.target.value)}
-          placeholder="Add guidelines such as 'include safety measures, certifications, etc.'"
-          sx={{ marginTop: 2 }}
         />
         <Button
           variant="contained"
           color="primary"
           onClick={handleSend}
           disabled={loading}
-          sx={{ marginTop: 2 }}
+          sx={{ mt: 2 }}
         >
           {loading ? <CircularProgress size={24} /> : "Send to Chatbot"}
         </Button>
