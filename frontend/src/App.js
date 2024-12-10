@@ -7,14 +7,12 @@ import {
   CircularProgress,
   Alert,
 } from "@mui/material";
-import { fetchSessions, updateQuery } from "./services/api";
+import { fetchSessions, updateQuery, getSessionDetails } from "./services/api";
 import InputField from "./components/InputField";
-import DropdownSelect from "./components/DropdownSelect.js";
+import DropdownSelect from "./components/DropdownSelect";
 
 const App = () => {
-  const [query, setQuery] = useState(
-    '("window cleaning" OR "window cleaner") AND (building OR skyscraper OR office) AND clean* AND ("safety harness" OR "high-rise")'
-  );
+  const [query, setQuery] = useState("");
   const [instructions, setInstructions] = useState("");
   const [updatedQuery, setUpdatedQuery] = useState("");
   const [sessionId, setSessionId] = useState("");
@@ -26,7 +24,7 @@ const App = () => {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    (async () => {
+    const loadSessions = async () => {
       try {
         const sessionData = await fetchSessions();
         setSessions(sessionData);
@@ -34,7 +32,8 @@ const App = () => {
         console.error("Error fetching sessions:", err);
         setError("Unable to fetch sessions. Please try again later.");
       }
-    })();
+    };
+    loadSessions();
   }, []);
 
   const handleSend = async () => {
@@ -60,6 +59,24 @@ const App = () => {
     }
   };
 
+  const handleSessionChange = async (e) => {
+    const selectedId = e.target.value;
+    setSelectedSession(selectedId);
+
+    try {
+      setLoading(true);
+      const data = await getSessionDetails(selectedId);
+
+      setQuery(data.initialQuery || "");
+      setUpdatedQuery(data.lastResultingQuery || "");
+    } catch (error) {
+      console.error("Error fetching session details:", error);
+      setError("Failed to load session details. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Box sx={{ padding: 4, backgroundColor: "#f5f5f5", minHeight: "100vh" }}>
       <Typography variant="h4" gutterBottom align="center">
@@ -72,7 +89,7 @@ const App = () => {
       <Box
         sx={{
           display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
+          gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" },
           gap: 2,
           mb: 4,
         }}
@@ -90,8 +107,9 @@ const App = () => {
             value: session.id,
             label: session.created_at,
           }))}
-          onChange={(e) => setSelectedSession(e.target.value)}
+          onChange={handleSessionChange}
         />
+
         <DropdownSelect
           label="Tone of Conversation"
           value={tone}
@@ -105,7 +123,12 @@ const App = () => {
 
       {/* Query Section */}
       <Box
-        sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, mb: 4 }}
+        sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+          gap: 4,
+          mb: 4,
+        }}
       >
         <Paper elevation={2} sx={{ p: 2 }}>
           <Typography variant="h6">Current Query</Typography>

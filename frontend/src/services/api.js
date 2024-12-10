@@ -13,3 +13,19 @@ export const updateQuery = async (payload) => {
 
   return await response.json();
 };
+
+export const getSessionDetails = async (sessionId) => {
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:5000/get-session-details/${sessionId}`
+    );
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to fetch session details");
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching session details:", error);
+    throw error;
+  }
+};
